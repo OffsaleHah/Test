@@ -25,23 +25,34 @@ class MainActivity : Activity() {
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
         setContentView(R.layout.activity_main)
+
+        // Запрашиваем разрешение Shizuku (оно понадобится для запуска TapOnce)
         Shizuku.addRequestPermissionResultListener(permListener)
         ShizukuHelper.ensurePermission()
 
+        // Кнопка выдачи разрешения "Поверх других приложений"
         findViewById<Button>(R.id.btnOverlay).setOnClickListener { askOverlay() }
 
+        // Кнопка Start — запускает OverlayService с плавающей кнопкой
         findViewById<Button>(R.id.btnStart).setOnClickListener {
             try {
-                ShizukuHelper.startUhidProcess(this)
-                startForegroundService(Intent(this, OverlayService::class.java))
-                Toast.makeText(this, "Инжектор клавиш запущен", Toast.LENGTH_LONG).show()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    startForegroundService(Intent(this, OverlayService::class.java))
+                else
+                    startService(Intent(this, OverlayService::class.java))
+
+                Toast.makeText(
+                    this,
+                    "Кнопка включена. Можно открывать Roblox.",
+                    Toast.LENGTH_LONG
+                ).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
 
+        // Кнопка Stop — останавливает сервис
         findViewById<Button>(R.id.btnStop).setOnClickListener {
-            try { KeyInjector.binder?.close() } catch (_: Exception) {}
             stopService(Intent(this, OverlayService::class.java))
             Toast.makeText(this, "Остановлено", Toast.LENGTH_SHORT).show()
         }
