@@ -2,7 +2,7 @@ package com.example.uhidbutton;
 
 interface IKeyInjector {
     void tapSpace();
-    void keyDown(int hid);
-    void keyUp(int hid);
+    void keyDown(int keyCode);
+    void keyUp(int keyCode);
     void close();
 }
