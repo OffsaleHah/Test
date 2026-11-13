@@ -77,11 +77,19 @@ class OverlayService : Service() {
                     injector?.tapSpace()
                     Toast.makeText(this@OverlayService, "Space ␣", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    Toast.makeText(this@OverlayService, "err: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@OverlayService,
+                        "err: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
 
+        // TYPE_APPLICATION_OVERLAY требует разрешения SYSTEM_ALERT_WINDOW
+        // (оно уже запрашивается в MainActivity через askOverlay()).
+        // TYPE_ACCESSIBILITY_OVERLAY здесь НЕ подходит — он доступен
+        // только реальным AccessibilityService.
         val params = WindowManager.LayoutParams(
             size, size,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
