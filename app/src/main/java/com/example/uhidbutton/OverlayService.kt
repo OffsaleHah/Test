@@ -4,61 +4,46 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.content.ContextCompat
+import rikka.shizuku.Shizuku
 
 class OverlayService : Service() {
+    private val TAG = "OverlayService"
     private lateinit var wm: WindowManager
     private var view: View? = null
-    private var injector: IKeyInjector? = null
-    private var receiverRegistered = false
-
-    private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(ctx: Context, intent: Intent) {
-            val container = intent.getParcelableExtra("binder", BinderContainer::class.java)
-                ?: return
-            val b = container.binder
-            if (!b.pingBinder()) return
-            injector = IKeyInjector.Stub.asInterface(b)
-            KeyInjector.binder = injector
-            KeyInjector.ready = true
-            showOverlay()
-        }
-    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        Log.d(TAG, "onCreate")
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         createChannel()
-        val filter = IntentFilter("intent.uhidbutton.sendBinder")
-        ContextCompat.registerReceiver(
-            this, receiver, filter, ContextCompat.RECEIVER_EXPORTED
-        )
-        receiverRegistered = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand")
         startForeground(1, buildNotification())
+        showOverlay()
         return START_STICKY
     }
 
     private fun showOverlay() {
-        if (view != null) return
+        if (view != null) {
+            Log.d(TAG, "view already exists")
+            return
+        }
         val density = resources.displayMetrics.density
         val size = (72 * density).toInt()
 
@@ -73,23 +58,27 @@ class OverlayService : Service() {
                 setStroke((2 * density).toInt(), Color.WHITE)
             }
             setOnClickListener {
+                Log.d(TAG, "click: launching TapOnce")
+                Toast.makeText(this@OverlayService, "Space ␣", Toast.LENGTH_SHORT).show()
                 try {
-                    injector?.tapSpace()
-                    Toast.makeText(this@OverlayService, "Space ␣", Toast.LENGTH_SHORT).show()
+                    Shizuku.newProcess(
+                        arrayOf(
+                            "app_process",
+                            "-Djava.class.path=${packageCodePath}",
+                            "/system/bin",
+                            "--nice-name=tap_once",
+                            "com.example.uhidbutton.TapOnce",
+                            android.view.KeyEvent.KEYCODE_SPACE.toString()
+                        ),
+                        null, null
+                    )
                 } catch (e: Exception) {
-                    Toast.makeText(
-                        this@OverlayService,
-                        "err: ${e.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Log.e(TAG, "newProcess failed", e)
+                    Toast.makeText(this@OverlayService, "err: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }
 
-        // TYPE_APPLICATION_OVERLAY требует разрешения SYSTEM_ALERT_WINDOW
-        // (оно уже запрашивается в MainActivity через askOverlay()).
-        // TYPE_ACCESSIBILITY_OVERLAY здесь НЕ подходит — он доступен
-        // только реальным AccessibilityService.
         val params = WindowManager.LayoutParams(
             size, size,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
@@ -104,8 +93,13 @@ class OverlayService : Service() {
             y = 300
         }
 
-        wm.addView(tv, params)
-        view = tv
+        try {
+            wm.addView(tv, params)
+            view = tv
+            Log.d(TAG, "wm.addView OK")
+        } catch (e: Exception) {
+            Log.e(TAG, "wm.addView FAILED", e)
+        }
     }
 
     private fun createChannel() {
@@ -127,12 +121,9 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
-        if (receiverRegistered) {
-            try { unregisterReceiver(receiver) } catch (_: Exception) {}
-        }
+        Log.d(TAG, "onDestroy")
         view?.let { runCatching { wm.removeView(it) } }
         view = null
-        try { injector?.close() } catch (_: Exception) {}
         super.onDestroy()
     }
 }
