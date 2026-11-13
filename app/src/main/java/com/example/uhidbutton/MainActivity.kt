@@ -12,12 +12,14 @@ import android.widget.Toast
 import rikka.shizuku.Shizuku
 
 class MainActivity : Activity() {
-    private val reqOverlay = 100
 
     private val permListener = Shizuku.OnRequestPermissionResultListener { _, grant ->
         val ok = grant == PackageManager.PERMISSION_GRANTED
-        Toast.makeText(this, if (ok) "Shizuku: разрешено" else "Shizuku: отклонено",
-            Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            this,
+            if (ok) "Shizuku: разрешено" else "Shizuku: отклонено",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     override fun onCreate(s: Bundle?) {
@@ -32,7 +34,7 @@ class MainActivity : Activity() {
             try {
                 ShizukuHelper.startUhidProcess(this)
                 startForegroundService(Intent(this, OverlayService::class.java))
-                Toast.makeText(this, "Запущено. Откройте Roblox.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Инжектор клавиш запущен", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
             }
