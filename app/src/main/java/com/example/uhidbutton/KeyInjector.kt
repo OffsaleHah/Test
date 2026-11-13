@@ -4,7 +4,6 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
-import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
 import java.lang.reflect.Method
 
@@ -17,46 +16,69 @@ object KeyEventInjector {
     fun prepare(): Boolean {
         if (inputManager != null && injectMethod != null) return true
         return try {
-            // 1. Получаем IBinder системного сервиса "input"
+            // Обход скрытых API (на Android 10+ интерфейс IInputManager скрыт)
+            runCatching {
+                val c = Class.forName("org.lsposed.hiddenapibypass.HiddenApiBypass")
+                c.getMethod("addHiddenApiExemptions", Array<String>::class.java)
+                    .invoke(null, arrayOf("L"))
+            }
+
+            // 1. Binder системного сервиса "input"
             val inputBinder: IBinder = SystemServiceHelper.getSystemService("input")
-            // 2. Оборачиваем его через Shizuku, чтобы вызовы шли от имени shell (UID 2000)
-            val wrappedBinder = ShizukuBinderWrapper(inputBinder)
-            // 3. Получаем прокси-объект IInputManager
+
+            // 2. Получаем прокси IInputManager.
+            //    Процесс уже работает под shell (UID 2000), а у shell есть
+            //    разрешение INJECT_EVENTS — поэтому прямой вызов Binder сработает.
             val stubClass = Class.forName("android.hardware.input.IInputManager\$Stub")
             val asInterface = stubClass.getMethod("asInterface", IBinder::class.java)
-            inputManager = asInterface.invoke(null, wrappedBinder)
+            inputManager = asInterface.invoke(null, inputBinder)
 
-            // 4. Ищем метод injectInputEvent (количество аргументов зависит от версии Android)
+            // 3. Ищем injectInputEvent — сигнатура зависит от версии Android
             val methods = inputManager!!.javaClass.methods.filter { it.name == "injectInputEvent" }
             for (m in methods) {
-                if (m.parameterTypes.size == 2) { // API <= 33
-                    injectMethod = m
-                    injectMethodTakesUid = false
-                    break
-                } else if (m.parameterTypes.size == 3) { // API >= 34
+                if (m.parameterTypes.size == 3) {
                     injectMethod = m
                     injectMethodTakesUid = true
                     break
                 }
             }
+            if (injectMethod == null) {
+                for (m in methods) {
+                    if (m.parameterTypes.size == 2) {
+                        injectMethod = m
+                        injectMethodTakesUid = false
+                        break
+                    }
+                }
+            }
             if (injectMethod == null) throw NoSuchMethodException("injectInputEvent not found")
-            Log.i(TAG, "KeyEventInjector prepared, method takes UID: $injectMethodTakesUid")
+
+            Log.i(TAG, "Ready. takesUid=$injectMethodTakesUid")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to prepare KeyEventInjector", e)
+            Log.e(TAG, "prepare() failed", e)
             false
         }
     }
 
-    fun injectKey(action: Int, keyCode: Int, metaState: Int = 0, source: Int = -1, downTime: Long = SystemClock.uptimeMillis()): Boolean {
+    fun injectKey(
+        action: Int,
+        keyCode: Int,
+        metaState: Int = 0,
+        source: Int = -1,
+        downTime: Long = SystemClock.uptimeMillis()
+    ): Boolean {
         if (!prepare()) return false
-        val event = KeyEvent(downTime, downTime, action, keyCode, 0, metaState, -1, 0, KeyEvent.FLAG_FROM_SYSTEM, source)
+        val event = KeyEvent(
+            downTime, downTime, action, keyCode, 0, metaState,
+            -1, 0, KeyEvent.FLAG_FROM_SYSTEM, source
+        )
         return try {
             val result = if (injectMethodTakesUid) {
-                // Для API 34+: (event, mode, targetUid). INVALID_UID = -1
+                // Android 14+: (event, mode, targetUid). -1 = текущий пользователь
                 injectMethod!!.invoke(inputManager, event, 0, -1)
             } else {
-                // Для API <= 33: (event, mode). 0 = INJECT_INPUT_EVENT_MODE_ASYNC
+                // Android ≤ 13: (event, mode). 0 = INJECT_INPUT_EVENT_MODE_ASYNC
                 injectMethod!!.invoke(inputManager, event, 0)
             }
             result !is Boolean || result == true
