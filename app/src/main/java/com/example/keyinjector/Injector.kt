@@ -1,5 +1,6 @@
 package com.example.keyinjector
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -10,13 +11,18 @@ object Injector {
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    @Volatile
+    var appContext: Context? = null
+
     private fun showError(e: Throwable) {
         mainHandler.post {
-            Toast.makeText(
-                null.takeIf { false }?.let { null },
-                "Ошибка: ${e.javaClass.simpleName}: ${e.message}",
-                Toast.LENGTH_LONG
-            ).show()
+            try {
+                Toast.makeText(
+                    appContext,
+                    "Ошибка: ${e.javaClass.simpleName}: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (_: Throwable) { }
         }
     }
 
