@@ -16,12 +16,13 @@ class FloatingService : Service() {
     private lateinit var windowManager: WindowManager
     private lateinit var floatingButton: Button
 
-    // Какая клавиша отправляется при нажатии кнопки — меняйте здесь
+    // Какая клавиша отправляется при нажатии — меняйте здесь
     private val targetKeyCode = KeyEvent.KEYCODE_SPACE
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate() {
         super.onCreate()
+        Injector.appContext = applicationContext
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         floatingButton = Button(this).apply { text = "⌨" }
@@ -37,16 +38,19 @@ class FloatingService : Service() {
         params.x = 100
         params.y = 400
 
-        // Тап — шлёт клавишу; перетаскивание двигает кнопку
+        var moved = false
         floatingButton.setOnTouchListener { _, event ->
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> true
+                MotionEvent.ACTION_DOWN -> { moved = false; true }
                 MotionEvent.ACTION_UP -> {
-                    Injector.keyDown(targetKeyCode)
-                    Injector.keyUp(targetKeyCode)
+                    if (!moved) {
+                        // Инжект теперь в фоне — интерфейс не зависает
+                        Injector.sendKey(targetKeyCode)
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    moved = true
                     params.x = event.rawX.toInt() - floatingButton.width / 2
                     params.y = event.rawY.toInt() - floatingButton.height / 2
                     windowManager.updateViewLayout(floatingButton, params)
