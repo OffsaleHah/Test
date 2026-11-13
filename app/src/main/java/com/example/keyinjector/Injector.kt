@@ -4,7 +4,9 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import rikka.shizuku.Shizuku
+import moe.shizuku.server.IShizukuService
+import rikka.shizuku.ShizukuBinderWrapper
+import rikka.shizuku.SystemServiceHelper
 import java.util.concurrent.Executors
 
 object Injector {
@@ -26,12 +28,15 @@ object Injector {
         }
     }
 
-    fun sendKey(keyCode: Int) {
+    private fun runCommand(cmd: Array<String>) {
         executor.execute {
             try {
-                val process = Shizuku.newProcess(
-                    arrayOf("input", "keyevent", keyCode.toString()), null, null
+                // Берём у Shizuku его "shell"-интерфейс и запускаем системную команду
+                val binder = ShizukuBinderWrapper(
+                    SystemServiceHelper.getSystemService("shizuku")
                 )
+                val service = IShizukuService.Stub.asInterface(binder)
+                val process = service.newProcess(cmd, null, null)
                 process.waitFor()
             } catch (e: Throwable) {
                 showError(e)
@@ -39,16 +44,11 @@ object Injector {
         }
     }
 
+    fun sendKey(keyCode: Int) {
+        runCommand(arrayOf("input", "keyevent", keyCode.toString()))
+    }
+
     fun tap(x: Int, y: Int) {
-        executor.execute {
-            try {
-                val process = Shizuku.newProcess(
-                    arrayOf("input", "tap", x.toString(), y.toString()), null, null
-                )
-                process.waitFor()
-            } catch (e: Throwable) {
-                showError(e)
-            }
-        }
+        runCommand(arrayOf("input", "tap", x.toString(), y.toString()))
     }
 }
