@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.Button
+import kotlin.math.abs
 
 class FloatingService : Service() {
 
@@ -18,6 +19,9 @@ class FloatingService : Service() {
 
     // Какая клавиша отправляется при нажатии — меняйте здесь
     private val targetKeyCode = KeyEvent.KEYCODE_SPACE
+
+    // Порог: сдвиг больше этого значения = перетаскивание, меньше = нажатие
+    private val touchSlop = 15
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate() {
@@ -39,21 +43,32 @@ class FloatingService : Service() {
         params.y = 400
 
         var moved = false
+        var downX = 0f
+        var downY = 0f
+
         floatingButton.setOnTouchListener { _, event ->
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { moved = false; true }
+                MotionEvent.ACTION_DOWN -> {
+                    moved = false
+                    downX = event.rawX
+                    downY = event.rawY
+                    true
+                }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) {
-                        // Инжект теперь в фоне — интерфейс не зависает
                         Injector.sendKey(targetKeyCode)
                     }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    moved = true
-                    params.x = event.rawX.toInt() - floatingButton.width / 2
-                    params.y = event.rawY.toInt() - floatingButton.height / 2
-                    windowManager.updateViewLayout(floatingButton, params)
+                    val dx = abs(event.rawX - downX)
+                    val dy = abs(event.rawY - downY)
+                    if (dx > touchSlop || dy > touchSlop) {
+                        moved = true
+                        params.x = event.rawX.toInt() - floatingButton.width / 2
+                        params.y = event.rawY.toInt() - floatingButton.height / 2
+                        windowManager.updateViewLayout(floatingButton, params)
+                    }
                     true
                 }
                 else -> false
